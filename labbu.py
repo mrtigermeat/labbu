@@ -6,31 +6,42 @@ from ftfy import fix_text as fxy
 from pathlib import Path as P
 from loguru import logger
 
-sys.path.append('.')
-
 from modules import Label
+
+logger_format = "{time:HH:mm:ss} | <lvl>{level}</lvl> | <lvl>{message}</lvl>"
+logger.remove()
+logger.add(sys.stdout, format=logger_format, level="DEBUG")
 
 class labbu:
 	def __init__(self,
 				 lang: str = 'en',
-				 debug: bool = False):
+				 debug: bool = False,
+				 verbose: bool = False):
 		super().__init__()
 
-		# set logger up
-		if not debug:
+		if verbose:
+			if debug: 
+				log_lvl = "DEBUG"
+			else: 
+				log_lvl = "INFO"
 			logger.remove()
-			logger.add(sys.stdout, level="INFO")
+			logger.add(sys.stdout, format=logger_format, level=log_lvl)
+		elif not verbose:
+			logger.remove()
+			logger.add(sys.stdout, format=logger_format, level="CRITICAL")
 			
 		self.lang_def_path = P('language')
 
 		assert self.lang_def_path.exists()
 
 		self.lang = lang
+		self.__setattr__('lang', self.lang)
 		self.load_language(lang)
 
-		self.min_short = (0, 51000)
+		self.short_range = (0, 51000)
 
 		self.lab = Label()
+		self.lab_name = ""
 
 		logger.debug("Successfully initialized LABBU")
 
@@ -73,35 +84,38 @@ class labbu:
 
 		logger.debug(f"Loaded Language : {lang}")
 
-	def load_lab(self, fpath: str):
+	# load lab with the Label class
+	def load(self, fpath: str):
 		try:
 			self.lab.load(fpath)
+			self.lab_name = self.lab.name
 		except Exception as e:
 			logger.warning(f"Cannot load label. Error: {e}")
 
-	def export_lab(self, fpath: str):
+	# export lab with the Label class
+	def export(self, fpath: str):
 		if fpath.endswith('.lab') or fpath.endswith('.TextGrid'):
 			self.lab.export(fpath)
 		else:
 			logger.warning(f"Cannot export label to {fpath}. Ensure file path is either '.lab' or '.TextGrid'")
 
-	# debug/reference to print the phoneme dictionary.
-	def validate_phonemes(self):
-		print('PHONE - TYPE\n')
-		for key in self.pho_dict:
-			print(f"{key} - {self.pho_dict[key]}")
-
 	# check if any stray phonemes are in the label
 	def check_label(self):
-		print(f"Checking label! {self.lab_name}")
+		logger.info(f"Checking label! {self.lab_name}")
+		err_count = False
 
 		for i in range(self.get_length()):
-			if not self.lab[i]['phone'] in self.pho_dict:
-				print(f"Undefined label @ index {str(i+1)}:\t'{self.lab[i]['phone']}' is not a phoneme.")
+			if not self.lab.get(i)['phone'] in self.pho_dict:
+				logger.warning(f"Undefined label @ index {str(i+1)}:\t'{self.lab.get(i)['phone']}' is not a phoneme.")
+				err_count = True
 
 		for i in range(self.get_length()):
-			if self.get_pho_len(i) in range(self.min_short):
-				print(f"Too short label @ index{str(i+1)}:\t'{self.lab[i]['phone']}' is too short. ({str(self.get_pho_len(i))})")
+			if self.get_pho_len(i) in self.short_range:
+				logger.warning(f"Too short label @ index{str(i+1)}:\t'{self.lab.get(i, 'phone')}' is too short. ({str(self.get_pho_len(i))})")
+				err_count = True
+
+		if not err_count:
+			logger.success(f"No errors detected in {self.lab_name}")
 
 	#checks if current index is the first or last in the label
 	def is_boe(self, i):
@@ -131,7 +145,7 @@ class labbu:
 			print(f'Unable to merge label at index {i}. Make sure it is not the end of the file!')
 
 	def get_pho_len(self, i):
-		return int(self.lab[i]['end']) - int(self.lab[i]['start'])
+		return int(self.lab.get(i)['end']) - int(self.lab.get(i)['start'])
 
 	def split_label(self, i, pho1, pho2):
 		'''
@@ -268,8 +282,10 @@ class labbu:
 
 
 if __name__ == '__main__':
-	labu = labbu(lang='en', debug=True)
+	labu = labbu(lang='en', debug=True, verbose=True)
 
-	labu.language = "ja"
+	labu.load('sample/bad_sample.lab')
 
-	print(labu.dictionary)
+	labu.check_label()
+
+	#labu.export('sample/samplino.TextGrid')

@@ -1,7 +1,13 @@
 import mytextgrid
+import sys
 
 from pathlib import Path as P
 from ftfy import fix_text as fxy #UNICODE Fixes
+from loguru import logger
+
+logger_format = "{time:HH:mm:ss} | <lvl>{level}</lvl> | <lvl>{message}</lvl>"
+logger.remove()
+logger.add(sys.stdout, format=logger_format, level="INFO")
 
 # inspired in part by how labels are handled in the nnsvs_db_converter
 class Label:
@@ -45,19 +51,19 @@ class Label:
 		try:
 			return self.lab[i]
 		except IndexError as e:
-			print(f"Index Error: {e}")
+			logger.error(f"Index Error: {e}")
 
 	def set(self, i: int, type, value):
 		try:
 			self.lab[i][type] = value
 		except Exception as e:
-			print(f"Cannot change label at index {i}: {e}")
+			logger.error(f"Cannot change label at index {i}: {e}")
 
 	def delete(self, i: int):
 		try:
 			self.lab.pop(i)
 		except Exception as e:
-			print(f"Cannot delete label index {i}")
+			logger.error(f"Cannot delete label index {i}")
 
 	def load(self, fpath: str):
 
