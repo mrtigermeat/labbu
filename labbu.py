@@ -1,147 +1,89 @@
 import sys, os, re
 import mytextgrid
 import yaml
+
 from ftfy import fix_text as fxy
-from pathlib import Path
+from pathlib import Path as P
+from loguru import logger
+
+sys.path.append('.')
+
+from modules import Label
 
 class labbu:
-	def __init__(self, lang='default'):
+	def __init__(self,
+				 lang: str = 'en',
+				 debug: bool = False):
 		super().__init__()
-		#initialize language from kwargs
-		if lang == 'japanese':
-			#is 'N' usually considered a vowel? Not sure, but adding this since i feel like it's worth it.
-			self.pho_dict={
-				'AP':'stop', 'SP':'stop','pau':'stop','sil':'stop','br':'stop',
-				'a':'vowel', 'i':'vowel', 'u':'vowel', 'e':'vowel', 'o':'vowel', 'N':'vowel',
-				'b':'stop', 'by':'stop', 'ch':'affricate', 'd':'stop', 'dy':'stop',
-				'cl':'stop', 'f':'fricative', 'fy':'fricative', 'g':'stop', 'gy':'stop',
-				'h':'fricative', 'hy':'fricative', 'j':'affricate', #jh in english
-				'k':'stop', 'ky':'stop', 'l':'liquid', 'ly':'liquid', 'm':'nasal',
-				'my':'nasal', 'n':'nasal', 'ny':'nasal', 'p':'stop', 'py':'stop',
-				'r':'stop', 'ry':'stop', 's':'fricative', 'sh':'fricative',
-				't':'stop', 'ts':'affricate', 'v':'fricative', 'vy':'fricative',
-				'w':'semivowel', 'y':'semivowel', 'z':'fricative', 'zy':'fricative',
-				'vf':'stop', 'spn':'stop'}
-		elif lang == 'millefeuille':
-			# millefeuille french phonetic system by imsupposedto
-			# https://github.com/imsupposedto/Millefeuille-DiffSinger-French/tree/main
-			self.pho_dict={
-				'AP':'stop', 'SP':'stop', 'pau':'stop', 'sil':'stop', 'br':'stop',
-				'ah':'vowel', 'eh':'vowel', 'ae':'vowel', 'ee':'vowel', 'oe':'vowel', 'ih':'vowel',
-				'oh':'vowel', 'oo':'vowel', 'ou':'vowel', 'uh':'vowel', 'en':'vowel', 'in':'vowel',
-				'un':'vowel', 'on':'vowel', 'b':'stop', 'd':'stop', 'f':'fricative', 'g':'stop',
-				'k':'stop', 'l':'liquid', 'm':'nasal', 'n':'nasal', 'p':'stop', 'r':'fricative',
-				's':'fricative', 'sh':'fricative', 't':'stop', 'v':'fricative', 'z':'fricative', 'j':'fricative',
-				'y':'semivowel', 'w':'semivowel', 'uy':'semivowel', 'ng':'nasal', 'rr':'stop', 'rx':'stop',
-				'q':'stop', 'vf':'stop', 'cl':'stop', 'exh':'stop', 'axh':'stop'
-			}
+
+		# set logger up
+		if not debug:
+			logger.remove()
+			logger.add(sys.stdout, level="INFO")
+			
+		self.lang_def_path = P('language')
+
+		assert self.lang_def_path.exists()
+
+		self.lang = lang
+		self.load_language(lang)
+
+		self.min_short = (0, 51000)
+
+		self.lab = Label()
+
+		logger.debug("Successfully initialized LABBU")
+
+	@property
+	def language(self):
+		return self.lang
+
+	@language.setter
+	def language(self, value):
+		self.load_language(value)
+
+	@property
+	def dictionary(self):
+		return self.pho_dict
+
+	@property
+	def labrange(self):
+		return range(len(self.lab))
+
+	@property
+	def full_label(self):
+		return self.lab
+
+	@full_label.setter
+	def full_label(self, new_label):
+		self.lab = new_label
+
+	def load_language(self, lang):
+		dict_path = self.lang_def_path / f"{lang}.yaml"
+		assert dict_path.exists()
+
+		self.pho_dict = yaml.safe_load(dict_path.read_text())
+
+		# global language constants
+		self.pho_dict['SP'] = ['silence']
+		self.pho_dict['pau'] = ['silence']
+		self.pho_dict['sil'] = ['silence']
+		self.pho_dict['AP'] = ['breath', 'silence']
+		self.pho_dict['br'] = ['breath', 'silence']
+
+		logger.debug(f"Loaded Language : {lang}")
+
+	def load_lab(self, fpath: str):
+		try:
+			self.lab.load(fpath)
+		except Exception as e:
+			logger.warning(f"Cannot load label. Error: {e}")
+
+	def export_lab(self, fpath: str):
+		if fpath.endswith('.lab') or fpath.endswith('.TextGrid'):
+			self.lab.export(fpath)
 		else:
-			#default to my prewritten phoneme dictionary
-			self.pho_dict={
-				'AP':'stop', 'SP':'stop', 
-				'pau':'stop', 'sil':'stop',
-				'a':'vowel', 'aa':'vowel', 'ae':'vowel', 'ah':'vowel', 'ao':'vowel', 'aw':'vowel', 'ax':'vowel', 'ay':'vowel', 
-				'b':'stop', 'bcl':'stop', 'by':'stop',
-				'cl':'stop', 'ch':'affricate',
-				'd':'stop', 'dh':'fricative', 'dx':'stop', 'dcl':'stop', 'dy':'stop',
-				'e':'vowel', 'eh':'vowel', 'er':'vowel', 'en':'vowel', 'eng':'vowel', 'ey':'vowel', 'el':'vowel', 'em':'vowel', 'ee':'vowel',
-				'f':'fricative', 'fy':'fricative',
-				'g':'stop', 'gcl':'stop', 'gy':'stop',
-				'hh':'fricative', 'h':'fricative', 'hy':'fricative', 'hv':'fricative',
-				'i':'vowel', 'ih':'vowel', 'iy':'vowel', 'ix':'vowel', 'ii':'vowel',
-				'j':'fricative', 'jh':'affricate',
-				'k':'stop', 'kcl': 'stop', 'ky':'stop',
-				'l':'liquid',
-				'm':'nasal', 'my':'nasal',
-				'n':'nasal', 'ng':'nasal', 'nx':'nasal', 'ny':'nasal', 'N':'vowel', 'nn':'vowel',
-				'o':'vowel', 'ow':'vowel', 'ox':'vowel', 'oy':'vowel', 'oo':'vowel',
-				'p':'stop', 'pcl':'stop', 'py':'stop',
-				'q':'stop',
-				'r':'liquid', 'rr':'stop', 'rx':'fricative', 'ry':'stop',
-				's':'fricative', 'sh':'fricative',
-				't':'stop', 'tcl':'stop', 'th':'fricative', 'ty':'stop', 'tx':'stop',
-				'u':'vowel', 'uh':'vowel', 'uw':'vowel', 'uu':'vowel', 'ux':'vowel',
-				'v':'fricative', 'vf':'stop',
-				'w':'semivowel',
-				'y':'semivowel',
-				'z':'fricative', 'zh':'fricative',
-				'spn': 'stop'}
-
-		self.palatal_consonants = ['by', 'dy', 'fy', 'gy', 'hy',
-								   'jy', 'ky', 'ly', 'my', 'ny',
-								   'py', 'ry', 'ty', 'vy', 'zy']
-		self.plosive_consonants = ['b', 'bcl', 'd', 'dcl', 'g', 'gcl', 'k', 'kcl', 'p', 'pcl', 't', 'tcl']
-		self.silence_phones = ['SP', 'pau', 'sil']
-		self.breath_phones = ['AP', 'br']
-		# default length for depalitilizing
-		self.depal_length = 355000
-		# minimum length allowed for labels
-		self.min_short = range(0, 51000)
-
-	def define_custom_lang(self, lang_path):
-		'''
-		Loads a custom yaml dictionary in this format:
-		aa: vowel
-		b: stop
-		r: liquid
-		'''
-		try:
-			with open(Path(lang_path), 'r', encoding='utf-8') as c_dict:
-				try:
-					self.pho_dict = yaml.safe_load(c_dict)
-				except yaml.YAMLError as exc:
-					print(f"Error loading {lang_path}:\n{exc}")
-
-			# append the dictionary with the silence phones.
-			for phone in self.silence_phones:
-				self.pho_dict[phone] = 'stop'
-			for phone in self.breath_phones:
-				self.pho_dict[phone] = 'stop'
-			print('Loaded custom language!')
-		except:
-			print('Error loading custom language.')
-
-	#loads the label. can be used to save a lab to a dict as well
-	def load_lab(self, fpath):
-		#load lab file
-		#syntax: [['phoneme', 'time_start', 'time_end']]
-		p = Path(fpath)
-		self.lab_name = p.stem
-		self.lab = []
-		index = 0
-		try:
-			with open(fpath, 'r', encoding='utf-8') as f:
-				for line in f:
-					index += 1
-					line = fxy(line)
-					split_line = line.rstrip().split(' ')
-					self.lab.append({'phone': split_line[2],'start': split_line[0],'end': split_line[1]})
-				f.close()
-		except:
-			if(index > 0):
-				print(f"Invalid line : {index}")
-			else:
-				print(f"Unable to open lab {self.lab_name}")
-			print('skipping')
-		return self.lab
-
-	#loads lab from textgrid. meant for MFA TextGrids :3
-	#code referenced from the amazing HAI-D (overdramatic on github)
-	def load_lab_from_textgrid(self, fpath, silence='SP', breath='AP'):
-		self.lab = []
-		tg = mytextgrid.read_from_file(fpath)
-		for tier in tg:
-			if tier.name == 'phones' and tier.is_interval():
-				for interval in tier:
-					time_start = int(float(interval.xmin)*10000000)
-					time_end = int(float(interval.xmax)*10000000)
-					label = interval.text
-					if label == '':
-						label = silence
-					if label in self.breath_phones:
-						label = breath
-					self.lab.append({'phone': label,'start': time_start,'end': time_end})
-		return self.lab
+			logger.warning(f"Cannot export label to {fpath}. Ensure file path is either '.lab' or '.TextGrid'")
 
 	# debug/reference to print the phoneme dictionary.
 	def validate_phonemes(self):
@@ -158,7 +100,7 @@ class labbu:
 				print(f"Undefined label @ index {str(i+1)}:\t'{self.lab[i]['phone']}' is not a phoneme.")
 
 		for i in range(self.get_length()):
-			if self.get_pho_len(i) in self.min_short:
+			if self.get_pho_len(i) in range(self.min_short):
 				print(f"Too short label @ index{str(i+1)}:\t'{self.lab[i]['phone']}' is too short. ({str(self.get_pho_len(i))})")
 
 	#checks if current index is the first or last in the label
@@ -188,28 +130,13 @@ class labbu:
 		else:
 			print(f'Unable to merge label at index {i}. Make sure it is not the end of the file!')
 
-	#makes palatalized consonants [ky] into 2 seperate consonants [k] [y]
-	#places the end of [y] 355000 units into the consonant, to guess where it would be?
-	#input should be index of palatilized consonant
-	def depalatilize(self, i):
-		#check if next label is a vowel
-		assert self.is_type(self.lab[i]['phone'], 'palatal')
-		if self.is_type(self.next_phone(i), 'vowel'):
-			#define where the y be starting!
-			y_start = int(self.lab[i]['end'])
-			y_end = y_start + self.depal_length
-			#update vowel
-			self.lab[i+1]['start'] = y_end
-			#rename original phoneme to remove y
-			self.lab[i]['phone'] = self.lab[i]['phone'][0]
-			#finally, insert the new lab
-			self.lab.insert(i+1, {'phone': 'y','start': y_start,'end': y_end})
-
 	def get_pho_len(self, i):
 		return int(self.lab[i]['end']) - int(self.lab[i]['start'])
 
-	#splits label in half
 	def split_label(self, i, pho1, pho2):
+		'''
+		Splits a label exactly in half
+		'''
 		p1_start = int(self.lab[i]['start'])
 		p2_end = int(self.lab[i]['end'])
 		p1_end = p1_start + int(self.get_pho_len(i) / 2)
@@ -220,13 +147,14 @@ class labbu:
 		self.lab[i]['end'] = p1_end
 		self.lab.insert(i+1, {'phone': pho2, 'start': p2_start, 'end': p2_end})
 
-	#replaces all instances with new phone
 	def replace_all(self, old_phone, new_phone):
+		'''
+		Replace all phonemes in a label with a new phoneme
+		'''
 		for i in range(self.get_length()):
 			if self.lab[i]['phone'] == old_phone:
 				self.lab[i]['phone'] = new_phone
 
-	#returns the current phoneme at a given index
 	def curr_phone(self, i):
 		if self.is_boe(i):
 			pass
@@ -237,7 +165,6 @@ class labbu:
 				print('IndexError: Please verify your output is correct!')
 				pass
 
-	#returns the phoneme directly before a given index
 	def prev_phone(self, i):
 		if self.is_boe(i):
 			pass
@@ -248,7 +175,6 @@ class labbu:
 				print('IndexError: Please verify your output is correct!')
 				pass
 
-	#returns the phoneme directly after a given index
 	def next_phone(self, i):
 		if self.is_boe(i):
 			pass
@@ -275,21 +201,6 @@ class labbu:
 		except KeyError as e:
 			print(f"ERR: Phoneme not defined, returning False | {e}")
 			return False
-
-	def export_lab(self, output_name): #exports the label file
-		#build output string
-		output_text = ''
-		for i in range(self.get_length()):
-			output_text += f"{self.lab[i]['start']} {self.lab[i]['end']} {self.lab[i]['phone']}\n"
-
-		if not output_name.endswith('.lab'):
-			p = Path(output_name)
-			output_name = p.stem + '.lab'
-
-		with open(output_name, 'w+', encoding='utf-8') as out:
-			out.seek(0)
-			out.write(output_text)
-			out.close()
 
 	#remove any numbers from the phone and lower it, but leave SP and AP alone
 	def clean_phones(self, i):
@@ -355,5 +266,10 @@ class labbu:
 			if self.lab[i]['phone'] == 'sp' or self.lab[i]['phone'] == 'ap':
 				self.lab[i]['phone'] = self.lab[i]['phone'].upper()
 
+
 if __name__ == '__main__':
-	labu = labbu()
+	labu = labbu(lang='en', debug=True)
+
+	labu.language = "ja"
+
+	print(labu.dictionary)
