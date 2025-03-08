@@ -63,7 +63,13 @@ class Label:
 		try:
 			self.lab.pop(i)
 		except Exception as e:
-			logger.error(f"Cannot delete label index {i}")
+			logger.error(f"Cannot delete label index {i}: {e}")
+
+	def insert(self, i: int, start, end, phone):
+		try:
+			self.lab.insert(i, {'start': start, 'end': end, 'phone': phone})
+		except Exception as e:
+			logger.error(f"Cannot insert label at index {i}: {e}")
 
 	def load(self, fpath: str):
 

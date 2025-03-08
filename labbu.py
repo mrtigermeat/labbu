@@ -38,7 +38,7 @@ class labbu:
 		self.__setattr__('lang', self.lang)
 		self.load_language(lang)
 
-		self.short_range = (0, 51000)
+		self.short_range = range(0, 51000)
 
 		self.lab = Label()
 		self.lab_name = ""
@@ -99,128 +99,115 @@ class labbu:
 		else:
 			logger.warning(f"Cannot export label to {fpath}. Ensure file path is either '.lab' or '.TextGrid'")
 
-	# check if any stray phonemes are in the label
-	def check_label(self):
-		logger.info(f"Checking label! {self.lab_name}")
-		err_count = False
-
-		for i in range(self.get_length()):
-			if not self.lab.get(i)['phone'] in self.pho_dict:
-				logger.warning(f"Undefined label @ index {str(i+1)}:\t'{self.lab.get(i)['phone']}' is not a phoneme.")
-				err_count = True
-
-		for i in range(self.get_length()):
-			if self.get_pho_len(i) in self.short_range:
-				logger.warning(f"Too short label @ index{str(i+1)}:\t'{self.lab.get(i, 'phone')}' is too short. ({str(self.get_pho_len(i))})")
-				err_count = True
-
-		if not err_count:
-			logger.success(f"No errors detected in {self.lab_name}")
-
 	#checks if current index is the first or last in the label
 	def is_boe(self, i):
 		return True if i == 0 or i == len(self.lab) else False
 
 	#returns the length of the label as an int
 	def get_length(self):
-		return len(self.lab) 
+		return len(self.lab)
+
+	# get's the length of a phoneme as an int
+	def get_pho_len(self, i):
+		return int(self.lab.get(i)['end']) - int(self.lab.get(i)['start'])
+
+	# check if any stray phonemes are in the label
+	def check_label(self):
+		logger.opt(colors=True).info(f"Checking label! <green>{self.lab_name}</green>")
+		err_count = False
+
+		for i in range(self.get_length()):
+			if not self.lab.get(i)['phone'] in self.pho_dict:
+				logger.opt(colors=True).warning(f"<white>Undefined label @ index {str(i+1)}: '</white><red>{self.lab.get(i)['phone']}</red><white>' is not a phoneme.</white>")
+				err_count = True
+
+		for i in range(self.get_length()):
+			if self.get_pho_len(i) in self.short_range:
+				label_length = float(self.get_pho_len(i)) / 10000000.0
+				logger.opt(colors=True).warning(f"<white>Too short label @ index {str(i+1)}: '</white><magenta>{self.lab.get(i)['phone']}</magenta><white>' is too short.</white> <blue>(Length: {"%.2f" % label_length}s)</blue>")
+				err_count = True
+
+		if not err_count:
+			logger.success(f"No errors detected in {self.lab_name}")
 
 	#overwrite the phoneme at a given index: labu.change_phone(i, 'aa')
 	def change_phone(self, i, new_phone):
-		self.lab[i]['phone'] = new_phone
+		self.lab.set(i)['phone'] = new_phone
 
 	#merges the current index with the next index: labu.merge_phones(i, 'cl')
 	def merge(self, i, new_phone):
 		if not self.is_boe(i):
 			try:
-				new_start = self.lab[i]['start']
-				new_end = self.lab[i+1]['end']
-				self.lab.pop(i+1)
-				self.lab[i]['start'] = new_start
-				self.lab[i]['end'] = new_end
-				self.lab[i]['phone'] = new_phone
-			except:
-				pass
+				new_start = self.lab.get(i)['start']
+				new_end = self.lab.get(i+1)['end']
+				self.lab.delete(i+1)
+				self.lab.set(i)['start'] = new_start
+				self.lab.set(i)['end'] = new_end
+				self.lab.set(i)['phone'] = new_phone
+			except Exception as e:
+				logger.error(f"Unable to merge phoneme at index {i}: {e}")
 		else:
-			print(f'Unable to merge label at index {i}. Make sure it is not the end of the file!')
+			logger.error(f'Unable to merge label at index {i}. Make sure it is not the end of the file!')
 
-	def get_pho_len(self, i):
-		return int(self.lab.get(i)['end']) - int(self.lab.get(i)['start'])
+	# splits a label in half
+	def split(self, i, pho1, pho2):
+		try:
+			p1_start = int(self.lab.get(i)['start'])
+			p2_end = int(self.lab.get(i)['end'])
+			p1_end = p1_start + int(self.get_pho_len(i) / 2)
+			p2_start = p1_end
 
-	def split_label(self, i, pho1, pho2):
-		'''
-		Splits a label exactly in half
-		'''
-		p1_start = int(self.lab[i]['start'])
-		p2_end = int(self.lab[i]['end'])
-		p1_end = p1_start + int(self.get_pho_len(i) / 2)
-		p2_start = p1_end
+			self.lab.set(i)['phone'] = pho1
+			self.lab.set(i)['start'] = p1_start
+			self.lab.set(i)['end'] = p1_end
+			self.lab.insert(i+1, p2_start, p2_end, pho2)
+		except Exception as e:
+			logger.error(f"Unable to split entry at index {i}: {e}")
 
-		self.lab[i]['phone'] = pho1
-		self.lab[i]['start'] = p1_start
-		self.lab[i]['end'] = p1_end
-		self.lab.insert(i+1, {'phone': pho2, 'start': p2_start, 'end': p2_end})
-
+	# replaces all instances of a phoneme with a new one in a label
 	def replace_all(self, old_phone, new_phone):
-		'''
-		Replace all phonemes in a label with a new phoneme
-		'''
 		for i in range(self.get_length()):
-			if self.lab[i]['phone'] == old_phone:
-				self.lab[i]['phone'] = new_phone
+			if self.lab.get(i)['phone'] == old_phone:
+				self.lab.get(i)['phone'] = new_phone
 
-	def curr_phone(self, i):
-		if self.is_boe(i):
-			pass
-		else:
-			try:
-				return self.lab[i]['phone']
-			except IndexError:
-				print('IndexError: Please verify your output is correct!')
-				pass
+	# returns the previous, current and next phoneme
+	def context(self, i):
+		try:
+			cp = self.lab.get(i)['phone']
+			if not self.is_boe(i):
+				pp = self.lab.get(i-1)['phone']
+				np = self.lab.get(i+1)['phone']
+			else:
+				if i == 0:
+					pp = ""
+					np = self.lab.get(i+1)['phone']
+				elif i == self.lab.get_length():
+					pp = self.lab.get(i-1)['phone']
+					np = ""
+		except IndexError as e:
+			logger.warning(f"Cannot get label context at index {i}: {e}")
 
-	def prev_phone(self, i):
-		if self.is_boe(i):
-			pass
-		else:
-			try:
-				return self.lab[i-1]['phone']
-			except IndexError:
-				print('IndexError: Please verify your output is correct!')
-				pass
-
-	def next_phone(self, i):
-		if self.is_boe(i):
-			pass
-		else:
-			try:
-				return self.lab[i+1]['phone']
-			except IndexError:
-				print('IndexError: Please verify your output is correct!')
-				pass
+		return pp, cp, np
 
 	#returns true if phoneme (arg1) is a certain type (arg2)
 	# labu.is_type('aa', 'vowel') returns 'True'
 	def is_type(self, phone, ph_type):
 		try:
-			if ph_type == 'plosive':
-				return True if phone in self.plosive_consonants else False
-			elif ph_type == 'palatal':
-				return True if phone in self.palatal_consonants and not self.is_type(phone, 'vowel') else False
-			elif ph_type == 'silence':
-				return True if phone in self.silence_phones else False
-			else:
-				curr_type = self.pho_dict[phone]
-				return True if curr_type == ph_type else False
+			if phone in self.pho_dict:
+				if ph_type in self.pho_dict[phone]:
+					return True
+				else:
+					return False
 		except KeyError as e:
-			print(f"ERR: Phoneme not defined, returning False | {e}")
+			logger.error(f"'{phone}' or '{ph_type}' not defined, returning False: {e}")
 			return False
 
 	#remove any numbers from the phone and lower it, but leave SP and AP alone
 	def clean_phones(self, i):
-		if self.curr_phone(i) != 'SP' or self.curr_phone(i) != 'AP':
+		pp, cp, np = self.context(i)
+		if not self.is_type(cp, 'silence') or not self.is_type(cp, 'breath'):
 			try:
-				new_phone = re.sub(r'[0-9]', '', self.curr_phone(i))
+				new_phone = re.sub(r'[0-9]', '', cp)
 				self.change_phone(i, new_phone.lower())
 			except TypeError as e:
 				print(f"Type Error at {i}: {e}")
@@ -232,54 +219,27 @@ class labbu:
 	#ensures there are no conflicts of timing in labels
 	def normalize_time(self):
 		for i in range(self.get_length()):
-			if self.lab[i]['start'] == self.lab[i-1]['end']:
+			if self.lab.get(i)['start'] == self.lab.get(i-1)['end']:
 				pass
 			else:
-				self.lab[i]['start'] = self.lab[i-1]['end']
-
-	#gets the mean of each occurance of a phoneme
-	def get_mean_phone_length(self, phone):
-		dur_list = []
-		for i in range(self.get_length()):
-			if self.lab.curr_phone(i) == phone:
-				dur_list.append(self.get_pho_len(i))
-		return dur_list.mean()
+				self.lab.set(i, 'start', self.lab.get(i-1)['end'])
 
 	#this is untested heehee
 	def adjust_lab_end(self, i, factor):
-		new_end = self.lab[i]['end'] + factor
-		self.lab[i]['end'] = new_end
-		self.lab[i+1]['start'] = new_end
+		new_end = self.lab.get(i)['end'] + factor
+		self.lab.set(i, 'end', new_end)
+		self.lab.set(i+1, 'start', new_end)
 
 	def is_between_vowels(self, i):
-		return True if self.is_type(self.next_phone(i), 'vowel') and self.is_type(self.prev_phone(i), 'vowel') else False
-
-	#converts lab from enunu-style to diffsinger-style
-	#(pau, br) > (SP, AP)
-	def enunu2diff(self):
-		self.replace_all('pau', 'SP')
-		self.replace_all('br', 'AP')
-
-	def diff2enunu(self):
-		self.replace_all('SP', 'pau')
-		self.replace_all('AP', 'br')
-
-	#unloads the label, you never know if you'll need it
-	def unload_lab(self):
-		del self.lab
-		self.lab = []
+		pp, cp, np = self.context(i)
+		return True if self.is_type(np, 'vowel') and self.is_type(pp, 'vowel') else False
 
 	def count_phones(self):
 		pho_list = []
 		for i in range(self.get_length()):
-			pho_list.append(self.curr_phone(i))
+			pp, cp, np = self.context(i)
+			pho_list.append(cp)
 		return pho_list
-
-	def fix_spap(self):
-		for i in range(self.get_length()):
-			if self.lab[i]['phone'] == 'sp' or self.lab[i]['phone'] == 'ap':
-				self.lab[i]['phone'] = self.lab[i]['phone'].upper()
-
 
 if __name__ == '__main__':
 	labu = labbu(lang='en', debug=True, verbose=True)
@@ -287,5 +247,3 @@ if __name__ == '__main__':
 	labu.load('sample/bad_sample.lab')
 
 	labu.check_label()
-
-	#labu.export('sample/samplino.TextGrid')
