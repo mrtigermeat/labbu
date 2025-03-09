@@ -1,0 +1,12 @@
+# this guide shows you all of the options you can do :)
+
+# TITLE
+# vowels
+a: [vowel, diphthong, nasal]
+# consonants
+b: [stop, plosive, voiced, unvoiced, coda, semivowel, liquid, nasal, fricative, affricate, consonant]
+# extras:
+vf: [stop]
+cl: [stop]
+axh: [stop]
+exh: [stop]
