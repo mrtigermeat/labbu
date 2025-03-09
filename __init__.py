@@ -1,2 +1,2 @@
-from labbu import labbu
-from labbu.modules import Label
+from .labbu import labbu
+from .modules import Label
