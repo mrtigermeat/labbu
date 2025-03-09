@@ -128,7 +128,7 @@ class labbu:
 		for i in range(self.get_length()):
 			if self.get_pho_len(i) in self.short_range:
 				label_length = float(self.get_pho_len(i)) / 10000000.0
-				logger.opt(colors=True).warning(f"<white>Too short label @ index {str(i+1)}: '</white><magenta>{self.lab.get(i)['phone']}</magenta><white>' is too short.</white> <blue>(Length: {"%.2f" % label_length}s)</blue>")
+				logger.opt(colors=True).warning(f"<white>Too short label @ index {str(i+1)}: '</white><magenta>{self.lab.get(i)['phone']}</magenta><white>' is too short.</white> <blue>(Length: {label_length:.2f}s)</blue>")
 				err_count = True
 
 		if not err_count:
