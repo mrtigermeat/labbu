@@ -7,7 +7,7 @@ from loguru import logger
 
 logger_format = "{time:HH:mm:ss} | <lvl>{level}</lvl> | <lvl>{message}</lvl>"
 logger.remove()
-logger.add(sys.stdout, format=logger_format, level="INFO")
+logger.add(sys.stdout, format=logger_format, level="DEBUG")
 
 # inspired in part by how labels are handled in the nnsvs_db_converter
 class Label:
@@ -52,6 +52,7 @@ class Label:
 			return self.lab[i]
 		except IndexError as e:
 			logger.error(f"Index Error: {e}")
+			return {'start': 0, 'end': 0, 'phone': ''}
 
 	def set(self, i: int, type, value):
 		try:
@@ -86,7 +87,7 @@ class Label:
 					for line in f:
 						line = fxy(line) #unicode fixes, JUUUST in case
 						split_line = line.rstrip().split(' ')
-						self.lab.append({'start': int(split_line[0]), 'end': int(split_line[1]), 'phone': split_line[2]})
+						self.lab.append({'start': int(split_line[0]), 'end': int(split_line[1]), 'phone': str(split_line[2])})
 				# TextGrid to label
 				if ext == '.TextGrid':
 					tg = mytextgrid.read_from_file(lab_path)

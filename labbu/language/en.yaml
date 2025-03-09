@@ -43,6 +43,8 @@ t: [stop, plosive, unvoiced]
 th: [fricative, unvoiced]
 tr: [affricate, cluster, unvoiced]
 v: [fricative, voiced]
+y: [semivowel, voiced]
+w: [semivowel, voiced]
 z: [fricative, voiced]
 zh: [fricative, voiced]
 # extra
